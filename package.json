@@ -2,10 +2,10 @@
   "name": "livevibe",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n companion,web,strudel \"pnpm -C apps/companion dev\" \"pnpm -C apps/web dev\" \"pnpm -C vendor/strudel/website dev\"",
+    "dev": "concurrently -n companion,web,strudel \"pnpm -C apps/companion dev\" \"pnpm -C apps/web dev\" \"pnpm -C vendor/strudel dev\"",
     "dev:companion": "pnpm -C apps/companion dev",
     "dev:web": "pnpm -C apps/web dev",
-    "dev:strudel": "pnpm -C vendor/strudel/website dev",
+    "dev:strudel": "pnpm -C vendor/strudel dev",
     "build": "pnpm -C apps/web build",
     "start": "pnpm -C apps/web start",
     "lint": "pnpm -C apps/web lint",
