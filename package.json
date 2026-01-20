@@ -1,0 +1,16 @@
+{
+  "name": "livevibe",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n companion,web \"pnpm -C apps/companion dev\" \"pnpm -C apps/web dev\"",
+    "dev:companion": "pnpm -C apps/companion dev",
+    "dev:web": "pnpm -C apps/web dev",
+    "build": "pnpm -C apps/web build",
+    "start": "pnpm -C apps/web start",
+    "lint": "pnpm -C apps/web lint",
+    "test": "echo \"No tests yet\""
+  },
+  "devDependencies": {
+    "concurrently": "8.2.2"
+  }
+}
