@@ -24,13 +24,10 @@ export default function Home() {
               companion-powered runtime control.
             </p>
             <div className="flex flex-wrap items-center gap-4 pt-2">
-              <Button size="lg" asChild className="bg-accent text-accent-foreground hover:bg-accent/90">
+              <Button variant="outline" size="lg" asChild className="bg-accent text-accent-foreground hover:bg-accent/90">
                 <Link href="http://localhost:4321" target="_blank">
                   Launch Session
                 </Link>
-              </Button>
-              <Button size="lg" variant="outline" className="border-panel-border hover:bg-panel text-muted-foreground">
-                View baseline plan
               </Button>
             </div>
           </div>

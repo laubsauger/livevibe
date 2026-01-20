@@ -1,0 +1,88 @@
+diff --git a/website/astro.config.mjs b/website/astro.config.mjs
+index 37904cb8..02c0eb17 100644
+--- a/website/astro.config.mjs
++++ b/website/astro.config.mjs
+@@ -1,4 +1,6 @@
+ import { defineConfig } from 'astro/config';
++import path from 'path';
++import { fileURLToPath } from 'url';
+ import react from '@astrojs/react';
+ import mdx from '@astrojs/mdx';
+ import remarkToc from 'remark-toc';
+@@ -10,6 +12,8 @@ import bundleAudioWorkletPlugin from 'vite-plugin-bundle-audioworklet';
+ import tailwind from '@astrojs/tailwind';
+ import AstroPWA from '@vite-pwa/astro';
+ 
++const __dirname = path.dirname(fileURLToPath(import.meta.url));
++
+ const site = process.env.STRUDEL_SITE || `https://strudel.cc/`; // root url without a path
+ const base = process.env.STRUDEL_BASE || '/'; // base path of the strudel site
+ const baseNoTrailing = base.endsWith('/') ? base.slice(0, -1) : base;
+@@ -135,6 +139,16 @@ export default defineConfig({
+   site,
+   base,
+   vite: {
++    server: {
++      fs: {
++        allow: ['../../../../'],
++      },
++    },
++    resolve: {
++      alias: {
++        '@livevibe/strudel-extensions': path.resolve(__dirname, '../../../packages/strudel-extensions/src/index.tsx'),
++      },
++    },
+     plugins: [bundleAudioWorkletPlugin()],
+     ssr: {
+       // Example: Force a broken package to skip SSR processing, if needed
+diff --git a/website/package.json b/website/package.json
+index 6f5539dd..215f1c6a 100644
+--- a/website/package.json
++++ b/website/package.json
+@@ -43,6 +43,7 @@
+     "@strudel/webaudio": "workspace:*",
+     "@strudel/mondo": "workspace:*",
+     "@strudel/xen": "workspace:*",
++    "@livevibe/strudel-extensions": "workspace:*",
+     "@supabase/supabase-js": "^2.48.1",
+     "@tailwindcss/forms": "^0.5.10",
+     "@tailwindcss/postcss": "^4.0.0",
+@@ -79,4 +80,4 @@
+   "engines": {
+     "node": ">=18.0.0"
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/website/src/repl/components/ReplEditor.jsx b/website/src/repl/components/ReplEditor.jsx
+index 23ceb122..0db4d7c2 100644
+--- a/website/src/repl/components/ReplEditor.jsx
++++ b/website/src/repl/components/ReplEditor.jsx
+@@ -3,6 +3,7 @@ import { HorizontalPanel, VerticalPanel } from '@src/repl/components/panel/Panel
+ import { Code } from '@src/repl/components/Code';
+ import UserFacingErrorMessage from '@src/repl/components/UserFacingErrorMessage';
+ import { Header } from './Header';
++import ExtensionHost from './ExtensionHost';
+ import { useSettings } from '@src/settings.mjs';
+ 
+ // type Props = {
+@@ -17,6 +18,7 @@ export default function ReplEditor(Props) {
+ 
+   return (
+     <div className="h-full flex flex-col relative" {...editorProps}>
++      <ExtensionHost context={context} />
+       <Loader active={pending} />
+       <Header context={context} />
+       <div className="grow flex relative overflow-hidden">
+diff --git a/website/tailwind.config.cjs b/website/tailwind.config.cjs
+index 2b840995..86b7d1a5 100644
+--- a/website/tailwind.config.cjs
++++ b/website/tailwind.config.cjs
+@@ -7,6 +7,7 @@ module.exports = {
+   content: [
+     './src/**/*.{astro,html,js,jsx,md,mdx,svelte,ts,tsx,vue}',
+     '../packages/react/src/**/*.{html,js,jsx,md,mdx,ts,tsx}',
++    '../../../../packages/strudel-extensions/src/**/*.{ts,tsx}',
+   ],
+   theme: {
+     extend: {

@@ -1,0 +1,28 @@
+export interface ChatMessage {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+}
+
+export interface LLMProvider {
+    chat(messages: ChatMessage[], onDelta: (delta: string) => void): Promise<void>;
+}
+
+export class MockLLMProvider implements LLMProvider {
+    async chat(messages: ChatMessage[], onDelta: (delta: string) => void): Promise<void> {
+        const lastMessage = messages[messages.length - 1];
+        const response = `I am a mock assistant. I received your message: "${lastMessage.content}". 
+        
+Here is a Strudel snippet:
+\`\`\`javascript
+note("c3").s("sawtooth")
+\`\`\`
+`;
+
+        // Simulate streaming
+        const chunks = response.split('');
+        for (const chunk of chunks) {
+            await new Promise(r => setTimeout(r, 20));
+            onDelta(chunk);
+        }
+    }
+}

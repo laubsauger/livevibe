@@ -2,14 +2,17 @@
   "name": "livevibe",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n companion,web,strudel \"pnpm -C apps/companion dev\" \"pnpm -C apps/web dev\" \"pnpm -C vendor/strudel dev\"",
+    "dev": "pnpm setup && concurrently -n companion,web,strudel \"pnpm -C apps/companion dev\" \"pnpm -C apps/web dev\" \"pnpm -C vendor/strudel dev\"",
     "dev:companion": "pnpm -C apps/companion dev",
     "dev:web": "pnpm -C apps/web dev",
-    "dev:strudel": "pnpm -C vendor/strudel dev",
-    "build": "pnpm -C apps/web build",
+    "dev:strudel": "pnpm setup && pnpm -C vendor/strudel dev",
+    "build": "pnpm setup && pnpm -C apps/web build",
     "start": "pnpm -C apps/web start",
     "lint": "pnpm -C apps/web lint",
-    "test": "echo \"No tests yet\""
+    "test": "echo \"No tests yet\"",
+    "postinstall": "./scripts/setup-strudel.sh",
+    "setup": "./scripts/setup-strudel.sh",
+    "patch:save": "cd vendor/strudel && git diff > ../../patches/strudel/integration.patch && echo '✅ Patch saved to patches/strudel/integration.patch'"
   },
   "devDependencies": {
     "concurrently": "8.2.2",

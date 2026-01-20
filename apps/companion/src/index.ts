@@ -2,8 +2,11 @@ import http from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { TransportState, LinkToClientMessage, ClientToLinkMessage } from "@livevibe/protocol";
 
+import { MockLLMProvider } from "@livevibe/llm";
+
 const host = process.env.HOST ?? "127.0.0.1";
 const port = Number(process.env.PORT ?? 8787);
+const llmProvider = new MockLLMProvider();
 
 // --- Transport State ---
 let state: TransportState = {
@@ -120,6 +123,16 @@ function handleMessage(msg: ClientToLinkMessage) {
     case "transport:tempo":
       state.tempo = msg.payload;
       console.log("[Transport] Tempo:", state.tempo);
+      break;
+    case "assistant:query":
+      console.log("[Assistant] Query:", msg.text);
+      llmProvider.chat([{ role: 'user', content: msg.text }], (delta: string) => {
+        // Send delta back to specific client? Or broadcast for now?
+        // Ideally we should have a session ID. For now, broadcast to all (simple MVP).
+        broadcast({ type: 'assistant:response', text: delta, done: false });
+      }).then(() => {
+        broadcast({ type: 'assistant:response', text: '', done: true });
+      });
       break;
   }
 }

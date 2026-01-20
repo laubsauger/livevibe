@@ -7,10 +7,12 @@ export interface TransportState {
 
 export type LinkToClientMessage =
     | { type: 'transport:state'; payload: TransportState }
-    | { type: 'observability:event'; payload: any };
+    | { type: 'observability:event'; payload: any }
+    | { type: 'assistant:response'; text: string; done: boolean };
 
 export type ClientToLinkMessage =
     | { type: 'transport:play' }
     | { type: 'transport:stop' }
     | { type: 'transport:tempo'; payload: number }
-    | { type: 'plan:apply'; payload: any };
+    | { type: 'plan:apply'; payload: any }
+    | { type: 'assistant:query'; text: string; context?: { selection?: string; currentLine?: string; line?: number } };

@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@livevibe/protocol": "workspace:*",
+    "@livevibe/llm": "workspace:*",
     "ws": "8.18.0"
   },
   "devDependencies": {
