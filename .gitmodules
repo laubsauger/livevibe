@@ -1,0 +1,3 @@
+[submodule "vendor/strudel"]
+	path = vendor/strudel
+	url = https://codeberg.org/laubsauger/strudel

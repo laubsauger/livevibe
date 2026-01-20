@@ -2,15 +2,17 @@
   "name": "livevibe",
   "private": true,
   "scripts": {
-    "dev": "concurrently -n companion,web \"pnpm -C apps/companion dev\" \"pnpm -C apps/web dev\"",
+    "dev": "concurrently -n companion,web,strudel \"pnpm -C apps/companion dev\" \"pnpm -C apps/web dev\" \"pnpm -C vendor/strudel/website dev\"",
     "dev:companion": "pnpm -C apps/companion dev",
     "dev:web": "pnpm -C apps/web dev",
+    "dev:strudel": "pnpm -C vendor/strudel/website dev",
     "build": "pnpm -C apps/web build",
     "start": "pnpm -C apps/web start",
     "lint": "pnpm -C apps/web lint",
     "test": "echo \"No tests yet\""
   },
   "devDependencies": {
-    "concurrently": "8.2.2"
+    "concurrently": "8.2.2",
+    "typescript": "5.5.4"
   }
 }

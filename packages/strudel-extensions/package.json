@@ -1,0 +1,21 @@
+{
+    "name": "@livevibe/strudel-extensions",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "main": "src/index.ts",
+    "dependencies": {
+        "@livevibe/protocol": "workspace:*"
+    },
+    "peerDependencies": {
+        "react": "*",
+        "react-dom": "*"
+    },
+    "devDependencies": {
+        "@types/react": "^19.2.9",
+        "@types/react-dom": "^19.2.3"
+    }
+}

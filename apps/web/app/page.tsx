@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { CompanionStatus } from "@/components/CompanionStatus";
 
 export default function Home() {
   return (
@@ -54,9 +55,7 @@ export default function Home() {
               <span className="font-mono uppercase tracking-[0.2em]">
                 Status
               </span>
-              <span>
-                Companion: waiting on `apps/companion` connection.
-              </span>
+              <CompanionStatus />
             </div>
           </div>
         </div>
