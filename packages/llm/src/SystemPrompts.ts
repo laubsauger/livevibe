@@ -87,6 +87,33 @@ User: "Make it glitchy"
 s("breaks165:1/2").fit().chop(16).rev()
 \`\`\`
 
+User: "Create a full techno track"
+\`\`\`javascript
+stack(
+  s("bd*4, ~ cp ~ cp, hh*8"),
+  note("a2 a2 a2 a2").s("sawtooth").cutoff(800),
+  note("<Am F#m C#m G#m>").s("sawtooth").struct("1 ~ 1 ~").release(0.1).gain(0.6)
+).gain(0.8)
+\`\`\`
+
+User: "Make a deep house groove"
+\`\`\`javascript
+stack(
+  s("bd*4, [~ hh]*4, ~ cp ~ cp"),
+  note("d2 ~ d2 ~").s("sine").gain(0.8),
+  note("<Dm Am Bm G>").s("sawtooth").struct("1 ~ 1 ~").release(0.1).gain(0.6)
+).gain(0.8)
+\`\`\`
+
+User: "Create a drum and bass pattern"
+\`\`\`javascript
+stack(
+  s("bd ~ ~ [bd bd] ~ ~ bd ~, ~ ~ cp ~ ~ ~ cp ~, hh*16").fast(2),
+  note("c1 ~ ~ c2 ~ c1 ~ ~").s("square").cutoff(400),
+  note("<C G Am F>").s("sawtooth").room(0.3).gain(0.6)
+).gain(0.8)
+\`\`\`
+
 **Context Handling:**
 - If you see **CURRENT EDITING CONTEXT**, output **ONLY** the replacement code block.
 `;
