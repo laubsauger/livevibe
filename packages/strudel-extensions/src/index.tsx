@@ -234,6 +234,26 @@ export function ExtensionPanel({ context }: { context: any }) {
     }
   }, [context]); // Dependency on context to potentially re-fetch if context changes (though getCodeMirrorView is dynamic)
 
+  const handleJumpToLine = useCallback((line: number) => {
+    try {
+      const view = getCodeMirrorView();
+      if (view && view.dispatch) {
+        const state = view.state;
+        // Ensure line number is valid
+        const safeLine = Math.max(1, Math.min(line, state.doc.lines));
+        const lineInfo = state.doc.line(safeLine);
+
+        view.dispatch({
+          selection: { anchor: lineInfo.from },
+          scrollIntoView: true
+        });
+        view.focus();
+      }
+    } catch (e) {
+      console.error('Jump failed', e);
+    }
+  }, [context]);
+
   return (
     <>
       <AssistantSidebar
@@ -243,6 +263,7 @@ export function ExtensionPanel({ context }: { context: any }) {
         activeContext={activeContext}
         onApplyCode={handleApplyCode}
         onTogglePlay={togglePlay}
+        onJumpToLine={handleJumpToLine}
       />
       <div style={containerStyle}>
         {/* Connection Status */}

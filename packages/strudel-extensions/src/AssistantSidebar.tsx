@@ -4,6 +4,27 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
+const scrollbarStyles = `
+  .strudel-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .strudel-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .strudel-scrollbar::-webkit-scrollbar-thumb {
+    background: #3f3f46;
+    border-radius: 3px;
+  }
+  .strudel-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #52525b;
+  }
+`;
+
+const INITIAL_MESSAGES: Message[] = [
+    { role: 'assistant', content: '# Strudel Assistant\nI can help you write code. Select lines to provide context.' }
+];
+
 interface AssistantSidebarProps {
     open: boolean;
     onClose: () => void;
@@ -11,6 +32,7 @@ interface AssistantSidebarProps {
     activeContext?: { selection?: string; currentLine?: string; line?: number };
     onApplyCode?: (code: string) => void;
     onTogglePlay?: () => void;
+    onJumpToLine?: (line: number) => void;
 }
 
 interface Message {
@@ -90,7 +112,10 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode }: { mess
             borderRadius: '8px',
             color: '#e4e4e7',
             fontSize: '13px',
-            lineHeight: '1.5'
+            lineHeight: '1.5',
+            overflowWrap: 'break-word', // prevent overflow
+            wordBreak: 'break-word',
+            minWidth: 0 // flexbox overflow fix
         }}>
             {message.role === 'assistant' && (
                 <div style={{ fontSize: '11px', color: '#a1a1aa', marginBottom: '4px', textTransform: 'uppercase' }}>AI</div>
@@ -139,19 +164,44 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode }: { mess
 });
 
 export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClose, ws, activeContext, onApplyCode, onTogglePlay }) => {
-    const [messages, setMessages] = useState<Message[]>([
-        { role: 'assistant', content: '# Strudel Assistant\nI can help you write code. Select lines to provide context.' }
-    ]);
+    // --- State with Persistence ---
+    const [messages, setMessages] = useState<Message[]>(() => {
+        if (typeof window === 'undefined') return [{ role: 'assistant', content: '# Strudel Assistant\nI can help you write code. Select lines to provide context.' }];
+        try {
+            const saved = localStorage.getItem('strudel-assistant-history');
+            return saved ? JSON.parse(saved) : [{ role: 'assistant', content: '# Strudel Assistant\nI can help you write code. Select lines to provide context.' }];
+        } catch {
+            return [{ role: 'assistant', content: '# \nI can help you write code. Select lines to provide context.' }];
+        }
+    });
+
+    const [selectedModel, setSelectedModel] = useState(() => {
+        if (typeof window === 'undefined') return 'gemini-2.5-flash';
+        return localStorage.getItem('strudel-assistant-model') || 'gemini-2.5-flash';
+    });
+
+    // Save to local storage
+    useEffect(() => {
+        localStorage.setItem('strudel-assistant-history', JSON.stringify(messages));
+    }, [messages]);
+
+    useEffect(() => {
+        localStorage.setItem('strudel-assistant-model', selectedModel);
+        setStats(prev => ({ ...prev, model: selectedModel }));
+    }, [selectedModel]);
+
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const [appliedCodes, setAppliedCodes] = useState<Set<string>>(new Set());
+
+    // Stats
     const [stats, setStats] = useState<{
         provider?: string;
         model?: string;
         usage?: { inputTokens: number; outputTokens: number; totalTokens: number; costEstimate: number };
-    }>({ provider: 'Anthropic', model: 'claude-3-5-sonnet' });
+    }>({ provider: 'Google', model: selectedModel }); // Init with selected
 
     // --- Resizable Logic ---
     const [width, setWidth] = useState(350);
@@ -168,8 +218,6 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
 
         const doDrag = (moveEvent: MouseEvent) => {
             if (!isResizingRef.current) return;
-            // Calculate new width (dragging LEFT increases width)
-            // e.g. startX = 1000, currentX = 990 -> delta = 10 -> width increases by 10
             const delta = startX - moveEvent.clientX;
             const newWidth = Math.max(250, Math.min(800, startWidth + delta));
             setWidth(newWidth);
@@ -254,9 +302,17 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
         const msg: ClientToLinkMessage = {
             type: 'assistant:query',
             text: input,
+            model: selectedModel,
             context: activeContext
         };
         ws.send(JSON.stringify(msg));
+    };
+
+    const handleClearHistory = () => {
+        if (confirm('Clear chat history?')) {
+            setMessages(INITIAL_MESSAGES);
+            localStorage.setItem('strudel-assistant-history', JSON.stringify(INITIAL_MESSAGES));
+        }
     };
 
     const handleApply = useCallback((code: string) => {
@@ -321,6 +377,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                 boxShadow: '-4px 0 10px rgba(0,0,0,0.3)'
             }}
         >
+            <style>{scrollbarStyles}</style>
             {/* Drag Handle */}
             <div
                 onMouseDown={startResizing}
@@ -339,11 +396,32 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
             {/* Header */}
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600, color: '#e4e4e7', fontSize: '14px' }}>Assistant</span>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}>✕</button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        style={{
+                            backgroundColor: '#27272a',
+                            color: '#e4e4e7',
+                            border: '1px solid #3f3f46',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            padding: '2px 4px',
+                            outline: 'none',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                        <option value="gemini-2.5-flash-lite-preview-09-2025">Gemini 2.5 Flash Lite</option>
+                        <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                    </select>
+                    <button onClick={handleClearHistory} title="Clear Context" style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: '12px' }}>🗑️</button>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}>✕</button>
+                </div>
             </div>
 
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="strudel-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {messages.map((m, i) => (
                     <MessageBubble
                         key={i}
@@ -375,7 +453,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
 
                     {/* LIVE PREVIEW OF CONTEXT */}
                     {activeContext && (
-                        <div style={{
+                        <div className="strudel-scrollbar" style={{
                             maxHeight: '100px',
                             overflowY: 'auto',
                             borderRadius: '4px',
