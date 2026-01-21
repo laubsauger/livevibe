@@ -203,8 +203,9 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
         usage?: { inputTokens: number; outputTokens: number; totalTokens: number; costEstimate: number };
     }>({ provider: 'Google', model: selectedModel }); // Init with selected
 
-    // --- Resizable Logic ---
+    // --- Resizable & Docking Logic ---
     const [width, setWidth] = useState(350);
+    const [dockSide, setDockSide] = useState<'left' | 'right'>('left'); // Default to left
     const isResizingRef = useRef(false);
 
     const startResizing = useCallback((mouseDownEvent: React.MouseEvent) => {
@@ -218,7 +219,14 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
 
         const doDrag = (moveEvent: MouseEvent) => {
             if (!isResizingRef.current) return;
-            const delta = startX - moveEvent.clientX;
+
+            let delta = 0;
+            if (dockSide === 'left') {
+                delta = moveEvent.clientX - startX; // Dragging right increases width
+            } else {
+                delta = startX - moveEvent.clientX; // Dragging left increases width
+            }
+
             const newWidth = Math.max(250, Math.min(800, startWidth + delta));
             setWidth(newWidth);
         };
@@ -233,7 +241,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
 
         window.addEventListener('mousemove', doDrag);
         window.addEventListener('mouseup', stopDrag);
-    }, [width]);
+    }, [width, dockSide]);
     // -----------------------
 
     // Auto-scroll to bottom
@@ -366,15 +374,16 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
             style={{
                 position: 'absolute',
                 top: '56px',
-                right: 0,
-                bottom: '48px', // Above transport bar
+                [dockSide]: 0, // Dynamic left/right
+                bottom: '48px',
                 width: `${width}px`,
                 backgroundColor: '#18181b', // zinc-900
-                borderLeft: '1px solid #27272a',
+                borderLeft: dockSide === 'right' ? '1px solid #27272a' : 'none',
+                borderRight: dockSide === 'left' ? '1px solid #27272a' : 'none',
                 display: 'flex',
                 flexDirection: 'column',
                 zIndex: 90,
-                boxShadow: '-4px 0 10px rgba(0,0,0,0.3)'
+                boxShadow: dockSide === 'right' ? '-4px 0 10px rgba(0,0,0,0.3)' : '4px 0 10px rgba(0,0,0,0.3)'
             }}
         >
             <style>{scrollbarStyles}</style>
@@ -383,7 +392,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                 onMouseDown={startResizing}
                 style={{
                     position: 'absolute',
-                    left: '-4px', // Extend slightly outside
+                    [dockSide === 'right' ? 'left' : 'right']: '-4px', // Opposite side
                     top: 0,
                     bottom: 0,
                     width: '6px', // Hit area
@@ -397,6 +406,13 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600, color: '#e4e4e7', fontSize: '14px' }}>Assistant</span>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                        onClick={() => setDockSide(prev => prev === 'left' ? 'right' : 'left')}
+                        title={`Dock to ${dockSide === 'left' ? 'Right' : 'Left'}`}
+                        style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: '12px' }}
+                    >
+                        {dockSide === 'left' ? '⇥' : '⇤'}
+                    </button>
                     <select
                         value={selectedModel}
                         onChange={(e) => setSelectedModel(e.target.value)}
@@ -464,6 +480,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                                 style={oneDark}
                                 language="javascript"
                                 PreTag="div"
+                                className="strudel-scrollbar"
                                 customStyle={{ margin: 0, padding: '8px', fontSize: '10px' }}
                                 showLineNumbers={true}
                                 startingLineNumber={activeContext.line}

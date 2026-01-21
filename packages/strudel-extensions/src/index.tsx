@@ -103,10 +103,15 @@ export function ExtensionPanel({ context }: { context: any }) {
   }
 
   function togglePlay() {
+    // Sync with Strudel
+    const scheduler = (window as any).scheduler;
+
     if (transport.playing) {
       sendMessage({ type: 'transport:stop' });
+      if (scheduler?.pause) scheduler.pause();
     } else {
       sendMessage({ type: 'transport:play' });
+      if (scheduler?.start) scheduler.start();
     }
   }
 
@@ -114,6 +119,9 @@ export function ExtensionPanel({ context }: { context: any }) {
     const newTempo = parseFloat(e.target.value);
     setTransport(prev => ({ ...prev, tempo: newTempo }));
     sendMessage({ type: 'transport:tempo', payload: newTempo });
+
+    const scheduler = (window as any).scheduler;
+    if (scheduler?.setCps) scheduler.setCps(newTempo / 60 / 4); // Strudel uses CPS (Cycles per second), usually scaled
   }
 
   const getStatusColor = () => {
