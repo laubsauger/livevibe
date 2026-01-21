@@ -10,11 +10,15 @@ export interface LLMProvider {
 export class MockLLMProvider implements LLMProvider {
     async chat(messages: ChatMessage[], onDelta: (delta: string) => void): Promise<void> {
         const lastMessage = messages[messages.length - 1];
-        const response = `I am a mock assistant. I received your message: "${lastMessage.content}". 
+        // const response = `I am a mock assistant. I received your message: "${lastMessage.content}". 
+        const response = ` 
         
 Here is a Strudel snippet:
 \`\`\`javascript
-note("c3").s("sawtooth")
+samples('github:yaxu/clean-breaks')
+s("amen/4").fit().chop(16).cut(1)
+.sometimesBy(.5, ply("2"))
+.sometimesBy(.25, mul(speed("-1")))
 \`\`\`
 `;
 

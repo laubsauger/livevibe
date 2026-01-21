@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TransportState, LinkToClientMessage, ClientToLinkMessage } from '@livevibe/protocol';
 import { AssistantSidebar } from './AssistantSidebar';
 
@@ -35,22 +35,27 @@ export function ExtensionPanel({ context }: { context: any }) {
     const pollInterval = setInterval(() => {
       const view = getCodeMirrorView();
       if (view && view.contentDOM) {
+        // Listen to document for selection changes (covers drag and keyboard nav better)
+        document.addEventListener('selectionchange', updateContext);
+
+        // Keep these as fallback/for robustness
         view.contentDOM.addEventListener('mouseup', updateContext);
         view.contentDOM.addEventListener('keyup', updateContext);
         view.contentDOM.addEventListener('click', updateContext);
-        view.contentDOM.addEventListener('focus', updateContext);
+
         clearInterval(pollInterval);
       }
     }, 500);
 
     return () => {
       clearInterval(pollInterval);
+      document.removeEventListener('selectionchange', updateContext);
+
       const view = getCodeMirrorView();
       if (view && view.contentDOM) {
         view.contentDOM.removeEventListener('mouseup', updateContext);
         view.contentDOM.removeEventListener('keyup', updateContext);
         view.contentDOM.removeEventListener('click', updateContext);
-        view.contentDOM.removeEventListener('focus', updateContext);
       }
     };
   }, [context]);
@@ -197,25 +202,37 @@ export function ExtensionPanel({ context }: { context: any }) {
     return undefined;
   };
 
-  const handleApplyCode = (code: string) => {
+  const handleApplyCode = useCallback((code: string) => {
     try {
       const view = getCodeMirrorView();
       if (view && view.dispatch) {
         const state = view.state;
-        // Simple logic: insert at cursor or replace selection
-        view.dispatch({
-          changes: { from: state.selection.main.from, to: state.selection.main.to, insert: code }
+        const selection = state.selection.main;
+
+        console.log('[Extension] Applying code to range:', {
+          from: selection.from,
+          to: selection.to,
+          docLength: state.doc.length
         });
+
+        // Ensure we are dispatching to the connected view
+        view.dispatch({
+          changes: { from: selection.from, to: selection.to, insert: code },
+          selection: { anchor: selection.from + code.length } // Move cursor to end
+        });
+
+        // Force focus back to editor
+        view.focus();
         console.log('Code applied successfully');
       } else {
-        console.error('Apply failed: Editor view not found');
+        console.error('Apply failed: Editor view not found or detached');
         alert('Could not apply code: Editor not connected.');
       }
     } catch (e) {
       console.error('Apply failed', e);
       alert('Error applying code: ' + e);
     }
-  };
+  }, [context]); // Dependency on context to potentially re-fetch if context changes (though getCodeMirrorView is dynamic)
 
   return (
     <>
@@ -225,6 +242,7 @@ export function ExtensionPanel({ context }: { context: any }) {
         ws={wsRef.current}
         activeContext={activeContext}
         onApplyCode={handleApplyCode}
+        onTogglePlay={togglePlay}
       />
       <div style={containerStyle}>
         {/* Connection Status */}

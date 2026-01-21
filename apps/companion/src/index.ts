@@ -129,9 +129,25 @@ function handleMessage(msg: ClientToLinkMessage) {
       llmProvider.chat([{ role: 'user', content: msg.text }], (delta: string) => {
         // Send delta back to specific client? Or broadcast for now?
         // Ideally we should have a session ID. For now, broadcast to all (simple MVP).
+        // Send delta
         broadcast({ type: 'assistant:response', text: delta, done: false });
       }).then(() => {
-        broadcast({ type: 'assistant:response', text: '', done: true });
+        // Send completion with metadata
+        broadcast({
+          type: 'assistant:response',
+          text: '',
+          done: true,
+          metadata: {
+            provider: 'Anthropic',
+            model: 'claude-3-5-sonnet-20240620',
+            usage: {
+              inputTokens: Math.floor(msg.text.length / 4), // rough estimate
+              outputTokens: 100, // mock
+              totalTokens: Math.floor(msg.text.length / 4) + 100,
+              costEstimate: 0.0012 // mock
+            }
+          }
+        });
       });
       break;
   }

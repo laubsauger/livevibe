@@ -8,7 +8,21 @@ export interface TransportState {
 export type LinkToClientMessage =
     | { type: 'transport:state'; payload: TransportState }
     | { type: 'observability:event'; payload: any }
-    | { type: 'assistant:response'; text: string; done: boolean };
+    | {
+        type: 'assistant:response';
+        text: string;
+        done: boolean;
+        metadata?: {
+            model: string;
+            provider: string;
+            usage?: {
+                inputTokens: number;
+                outputTokens: number;
+                totalTokens: number;
+                costEstimate: number;
+            }
+        }
+    };
 
 export type ClientToLinkMessage =
     | { type: 'transport:play' }
