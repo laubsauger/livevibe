@@ -147,10 +147,60 @@ function handleMessage(msg: ClientToLinkMessage) {
       console.log("[Assistant] Query:", msg.text, "Context:", msg.context);
 
       const messages = [{ role: 'user', content: msg.text } as const];
+      let fullResponse = '';
 
       llmProvider.chat(messages, (delta: string) => {
+        fullResponse += delta;
         broadcast({ type: 'assistant:response', text: delta, done: false });
-      }, { ...msg.context, model: msg.model }).then((result) => { // Map msg.model to context
+      }, { ...msg.context, model: msg.model }).then(async (result) => {
+        // Self-correction: validate code blocks and retry if errors
+        const codeBlockRegex = /```(?:javascript|js)?\s*\n([\s\S]*?)```/g;
+        const codeBlocks: string[] = [];
+        let match;
+        while ((match = codeBlockRegex.exec(fullResponse)) !== null) {
+          codeBlocks.push(match[1]);
+        }
+
+        if (codeBlocks.length > 0) {
+          // Simple validation (expanded version could use PatternValidator)
+          const errors: string[] = [];
+          for (const code of codeBlocks) {
+            // Check for hallucinated functions
+            const invalidFns = ['.stutter(', '.supersaw(', '.wobble(', '.spread('];
+            for (const fn of invalidFns) {
+              if (code.includes(fn)) {
+                errors.push(`Invalid function "${fn.replace('(', '')}" does not exist in Strudel`);
+              }
+            }
+            // Check for Haskell syntax
+            if (/\bd[1-9]\s*\$/.test(code)) {
+              errors.push('Invalid Haskell syntax "d1 $" - use note() or s() directly');
+            }
+            // Check balanced parens
+            const opens = (code.match(/\(/g) || []).length;
+            const closes = (code.match(/\)/g) || []).length;
+            if (opens !== closes) {
+              errors.push('Unbalanced parentheses');
+            }
+          }
+
+          // If errors found, do one self-correction attempt
+          if (errors.length > 0) {
+            console.log('[Assistant] Self-correction triggered:', errors);
+            broadcast({ type: 'assistant:response', text: '\n\n---\n*Detected issues, refining...*\n\n', done: false });
+
+            const correctionMessages = [
+              { role: 'user' as const, content: msg.text },
+              { role: 'assistant' as const, content: fullResponse },
+              { role: 'user' as const, content: `The code you provided has the following issues:\n${errors.join('\n')}\n\nPlease provide a corrected version using only valid Strudel JavaScript syntax.` }
+            ];
+
+            await llmProvider.chat(correctionMessages, (delta: string) => {
+              broadcast({ type: 'assistant:response', text: delta, done: false });
+            }, { ...msg.context, model: msg.model });
+          }
+        }
+
         broadcast({
           type: 'assistant:response',
           text: '',

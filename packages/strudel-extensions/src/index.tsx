@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TransportState, LinkToClientMessage, ClientToLinkMessage } from '@livevibe/protocol';
 import { AssistantSidebar } from './AssistantSidebar';
+import { injectAudioAnalyzer, getAudioAnalysis } from './AudioAnalyzer';
+import { validatePattern, formatValidationResult } from './PatternValidator';
+import { savePattern } from './PatternStore';
 
 export function initExtensions(context: any) {
   console.log('[LiveVibe] Extensions loaded');
@@ -21,27 +24,45 @@ export function ExtensionPanel({ context }: { context: any }) {
     time: 0
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeContext, setActiveContext] = useState<{ selection?: string; currentLine?: string; line?: number }>();
+  const [activeContext, setActiveContext] = useState<{
+    selection?: string;
+    currentLine?: string;
+    line?: number;
+    audioFeatures?: {
+      isPlaying: boolean;
+      bass: number;
+      mid: number;
+      treble: number;
+      brightness: 'dark' | 'balanced' | 'bright';
+    };
+  }>();
 
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Inject audio analyzer on mount
   useEffect(() => {
+    injectAudioAnalyzer();
+  }, []);
+
+  useEffect(() => {
+    let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
+
     const updateContext = () => {
-      const ctx = getEditorContext();
-      if (ctx) setActiveContext(ctx);
+      // Debounce to prevent excessive updates during typing
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        const ctx = getEditorContext();
+        if (ctx) setActiveContext(ctx);
+      }, 100); // 100ms debounce
     };
 
     // Poll for editor existence, then attach listeners
     const pollInterval = setInterval(() => {
       const view = getCodeMirrorView();
       if (view && view.contentDOM) {
-        // Listen to document for selection changes (covers drag and keyboard nav better)
+        // selectionchange covers most cases; mouseup for drag selections
         document.addEventListener('selectionchange', updateContext);
-
-        // Keep these as fallback/for robustness
         view.contentDOM.addEventListener('mouseup', updateContext);
-        view.contentDOM.addEventListener('keyup', updateContext);
-        view.contentDOM.addEventListener('click', updateContext);
 
         clearInterval(pollInterval);
       }
@@ -49,16 +70,59 @@ export function ExtensionPanel({ context }: { context: any }) {
 
     return () => {
       clearInterval(pollInterval);
+      if (debounceTimeout) clearTimeout(debounceTimeout);
       document.removeEventListener('selectionchange', updateContext);
 
       const view = getCodeMirrorView();
       if (view && view.contentDOM) {
         view.contentDOM.removeEventListener('mouseup', updateContext);
-        view.contentDOM.removeEventListener('keyup', updateContext);
-        view.contentDOM.removeEventListener('click', updateContext);
       }
     };
   }, [context]);
+
+  // Global keyboard shortcut: Cmd+Shift+S to save pattern from editor
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Cmd+Shift+S or Ctrl+Shift+S
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+
+        const view = getCodeMirrorView();
+        if (!view || !view.state) {
+          alert('Editor not available');
+          return;
+        }
+
+        const state = view.state;
+        const selection = state.selection.main;
+        const selectedText = state.sliceDoc(selection.from, selection.to);
+
+        // Use selection if available, otherwise entire document
+        const codeToSave = selectedText.trim() || state.doc.toString();
+
+        if (!codeToSave) {
+          alert('Nothing to save');
+          return;
+        }
+
+        const name = prompt('Save pattern as:', `Pattern ${Date.now().toString(36)}`);
+        if (name) {
+          savePattern(name, codeToSave);
+          console.log('[PatternStore] Saved:', name);
+
+          // Show brief notification (non-blocking)
+          const toast = document.createElement('div');
+          toast.textContent = `✅ Saved "${name}"`;
+          toast.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:8px 16px;border-radius:4px;z-index:9999;font-size:12px;font-family:monospace;';
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 2000);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
 
   useEffect(() => {
@@ -200,10 +264,20 @@ export function ExtensionPanel({ context }: { context: any }) {
         const selection = state.sliceDoc(selectionRange.from, selectionRange.to);
         const line = state.doc.lineAt(selectionRange.head);
 
+        // Get audio analysis
+        const audio = getAudioAnalysis();
+
         return {
           selection: selection || undefined,
           currentLine: line.text,
-          line: line.number
+          line: line.number,
+          audioFeatures: audio.isConnected ? {
+            isPlaying: audio.isPlaying,
+            bass: audio.bass,
+            mid: audio.mid,
+            treble: audio.treble,
+            brightness: audio.brightness
+          } : undefined
         };
       }
     } catch (e) { console.error('Error getting context', e); }
@@ -221,6 +295,18 @@ export function ExtensionPanel({ context }: { context: any }) {
           mode,
           selection: { from: selection.from, to: selection.to, empty: selection.empty }
         });
+
+        // Validate pattern before applying
+        const validation = validatePattern(code);
+        if (!validation.valid) {
+          const errorMsg = formatValidationResult(validation);
+          console.warn('[Extension] Validation failed:', errorMsg);
+          if (!confirm(`Pattern has errors:\n\n${errorMsg}\n\nApply anyway?`)) {
+            return;
+          }
+        } else if (validation.warnings.length > 0) {
+          console.info('[Extension] Validation warnings:', validation.warnings);
+        }
 
         if (mode === 'insert') {
           // INSERT MODE: Always insert on new line below current line

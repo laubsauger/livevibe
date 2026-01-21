@@ -3,6 +3,7 @@ import { ClientToLinkMessage, LinkToClientMessage } from '@livevibe/protocol';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { savePattern, getPatterns, deletePattern, SavedPattern } from './PatternStore';
 
 const scrollbarStyles = `
   .strudel-scrollbar::-webkit-scrollbar {
@@ -29,7 +30,18 @@ interface AssistantSidebarProps {
     open: boolean;
     onClose: () => void;
     ws?: WebSocket | null;
-    activeContext?: { selection?: string; currentLine?: string; line?: number };
+    activeContext?: {
+        selection?: string;
+        currentLine?: string;
+        line?: number;
+        audioFeatures?: {
+            isPlaying: boolean;
+            bass: number;
+            mid: number;
+            treble: number;
+            brightness: 'dark' | 'balanced' | 'bright';
+        };
+    };
     onApplyCode?: (code: string, mode?: 'insert' | 'replace') => void;
     onTogglePlay?: () => void;
     onJumpToLine?: (line: number) => void;
@@ -38,7 +50,18 @@ interface AssistantSidebarProps {
 interface Message {
     role: 'user' | 'assistant';
     content: string;
-    context?: { selection?: string; currentLine?: string; line?: number };
+    context?: {
+        selection?: string;
+        currentLine?: string;
+        line?: number;
+        audioFeatures?: {
+            isPlaying: boolean;
+            bass: number;
+            mid: number;
+            treble: number;
+            brightness: 'dark' | 'balanced' | 'bright';
+        };
+    };
 }
 
 // Memoized Message Bubble to prevent re-rendering of previous messages
@@ -74,15 +97,29 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode, hasSelec
             } as React.CSSProperties;
 
             return (
-                <div style={{ marginTop: '8px', marginBottom: '8px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #3f3f46' }}>
-                    {/* Code Toolbar */}
+                <div style={{ marginTop: '8px', marginBottom: '8px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #3f3f46', position: 'relative' }}>
+                    {/* Code Content with max height */}
+                    <div style={{ maxHeight: '300px', overflowY: 'auto' }} className="strudel-scrollbar">
+                        <SyntaxHighlighter
+                            style={oneDark}
+                            language={match[1]}
+                            PreTag="div"
+                            customStyle={{ margin: 0, padding: '12px', fontSize: '12px' }}
+                            {...props}
+                        >
+                            {codeString}
+                        </SyntaxHighlighter>
+                    </div>
+                    {/* Code Toolbar - Sticky at bottom */}
                     <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         padding: '4px 8px',
                         backgroundColor: '#27272a',
-                        borderBottom: '1px solid #3f3f46'
+                        borderTop: '1px solid #3f3f46',
+                        position: 'sticky',
+                        bottom: 0
                     }}>
                         <span style={{ fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase' }}>{match[1]}</span>
                         {onApplyCode && (
@@ -90,6 +127,19 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode, hasSelec
                                 <span style={{ ...buttonStyle, backgroundColor: '#22c55e', cursor: 'default' }}>Applied ✓</span>
                             ) : (
                                 <div style={{ display: 'flex', gap: '4px' }}>
+                                    <button
+                                        onClick={() => {
+                                            const name = prompt('Save pattern as:', `Pattern ${Date.now().toString(36)}`);
+                                            if (name) {
+                                                savePattern(name, codeString);
+                                                alert(`Saved "${name}"!`);
+                                            }
+                                        }}
+                                        title="Save to favorites"
+                                        style={{ ...buttonStyle, backgroundColor: '#eab308' }}
+                                    >
+                                        ⭐
+                                    </button>
                                     <button
                                         onClick={() => onApplyCode(codeString, 'insert')}
                                         title="Insert code on a new line below cursor"
@@ -108,15 +158,6 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode, hasSelec
                             )
                         )}
                     </div>
-                    <SyntaxHighlighter
-                        style={oneDark}
-                        language={match[1]}
-                        PreTag="div"
-                        customStyle={{ margin: 0, padding: '12px', fontSize: '12px' }}
-                        {...props}
-                    >
-                        {codeString}
-                    </SyntaxHighlighter>
                 </div>
             );
         }
@@ -215,6 +256,8 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const [appliedCodes, setAppliedCodes] = useState<Set<string>>(new Set());
+    const [showPatterns, setShowPatterns] = useState(false);
+    const [savedPatterns, setSavedPatterns] = useState<SavedPattern[]>([]);
 
     // Stats
     const [stats, setStats] = useState<{
@@ -508,17 +551,117 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                         <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                         <option value="gemini-2.5-flash-lite-preview-09-2025">Gemini 2.5 Flash Lite</option>
                         <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                        <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
                     </select>
                     <button onClick={handleClearHistory} title="Clear Context" style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', fontSize: '12px' }}>🗑️</button>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer' }}>✕</button>
                 </div>
             </div>
 
+            {/* Patterns Library Toggle */}
+            <div style={{ borderBottom: '1px solid #27272a' }}>
+                <button
+                    onClick={() => {
+                        setShowPatterns(!showPatterns);
+                        if (!showPatterns) setSavedPatterns(getPatterns());
+                    }}
+                    style={{
+                        width: '100%',
+                        padding: '8px 16px',
+                        background: 'none',
+                        border: 'none',
+                        color: '#a1a1aa',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}
+                >
+                    <span>📁 Patterns Library</span>
+                    <span>{showPatterns ? '▲' : '▼'}</span>
+                </button>
+                {showPatterns && (
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '8px' }} className="strudel-scrollbar">
+                        {savedPatterns.length === 0 ? (
+                            <div style={{ fontSize: '11px', color: '#71717a', textAlign: 'center', padding: '8px' }}>
+                                No saved patterns yet. Use ⭐ or Cmd+Shift+S to save.
+                            </div>
+                        ) : (
+                            savedPatterns.map(p => (
+                                <div key={p.id} style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    marginBottom: '4px',
+                                    backgroundColor: '#27272a',
+                                    fontSize: '11px'
+                                }}>
+                                    <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        <div style={{ fontWeight: 600, color: '#e4e4e7' }}>{p.name}</div>
+                                        <div style={{ fontSize: '9px', color: '#71717a' }}>{new Date(p.timestamp).toLocaleDateString()}</div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <button
+                                            onClick={() => onApplyCode?.(p.content, 'replace')}
+                                            title="Apply pattern"
+                                            style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '3px', padding: '2px 6px', cursor: 'pointer', fontSize: '10px' }}
+                                        >
+                                            ▶
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (confirm(`Delete "${p.name}"?`)) {
+                                                    deletePattern(p.id);
+                                                    setSavedPatterns(getPatterns());
+                                                }
+                                            }}
+                                            title="Delete pattern"
+                                            style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '3px', padding: '2px 6px', cursor: 'pointer', fontSize: '10px' }}
+                                        >
+                                            🗑
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
+
             {/* Messages */}
             <div className="strudel-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {messages.map((m, i) => (
+                {/* Show collapsed indicator for older messages */}
+                {messages.length > 20 && (
+                    <button
+                        onClick={() => {
+                            // Clear history older than 20 messages to prevent memory issues
+                            const trimmedMessages = messages.slice(-20);
+                            setMessages(trimmedMessages);
+                            localStorage.setItem('strudel-assistant-history', JSON.stringify(trimmedMessages));
+                        }}
+                        style={{
+                            background: '#27272a',
+                            border: '1px solid #3f3f46',
+                            color: '#a1a1aa',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            textAlign: 'center'
+                        }}
+                    >
+                        {messages.length - 20} older messages hidden • Click to trim history
+                    </button>
+                )}
+                {/* Only render last 20 messages for performance */}
+                {messages.slice(-20).map((m, i) => (
                     <MessageBubble
-                        key={i}
+                        key={messages.length - 20 + i}
                         message={m}
                         appliedCodes={appliedCodes}
                         onApplyCode={m.role === 'assistant' ? handleApply : undefined}

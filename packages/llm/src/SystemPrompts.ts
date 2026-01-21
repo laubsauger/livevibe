@@ -5,6 +5,13 @@ export interface PromptContext {
     currentLine?: string;
     line?: number;
     model?: string;
+    audioFeatures?: {
+        isPlaying: boolean;
+        bass: number;
+        mid: number;
+        treble: number;
+        brightness: 'dark' | 'balanced' | 'bright';
+    };
 }
 
 export class SystemPromptHarness {
@@ -126,6 +133,12 @@ stack(
             systemInstruction += `\n\n**CURRENT EDITING CONTEXT**:\nThe user has selected the following code (Line ${context.line}):\n\`\`\`javascript\n${context.selection}\n\`\`\`\n\nIf the user request implies an edit, output ONLY the replacement code for this block if possible, or the full working block.`;
         } else if (context?.currentLine) {
             systemInstruction += `\n\n**CURRENT LINE CONTEXT**:\nThe cursor is at Line ${context.line}: \`${context.currentLine}\`.`;
+        }
+
+        // Add audio context if playing
+        if (context?.audioFeatures?.isPlaying) {
+            const af = context.audioFeatures;
+            systemInstruction += `\n\n**AUDIO STATUS**: Currently playing. Bass: ${af.bass > 150 ? 'high' : af.bass > 75 ? 'medium' : 'low'}, Mid: ${af.mid > 150 ? 'high' : af.mid > 75 ? 'medium' : 'low'}, Treble: ${af.treble > 150 ? 'high' : af.treble > 75 ? 'medium' : 'low'}, Brightness: ${af.brightness}. Consider this when suggesting variations or additions.`;
         }
 
         // Extract history and last message
