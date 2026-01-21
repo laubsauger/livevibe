@@ -8,8 +8,9 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@livevibe/protocol": "workspace:*",
     "@livevibe/llm": "workspace:*",
+    "@livevibe/protocol": "workspace:*",
+    "dotenv": "^17.2.3",
     "ws": "8.18.0"
   },
   "devDependencies": {

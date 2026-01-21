@@ -29,4 +29,4 @@ export type ClientToLinkMessage =
     | { type: 'transport:stop' }
     | { type: 'transport:tempo'; payload: number }
     | { type: 'plan:apply'; payload: any }
-    | { type: 'assistant:query'; text: string; context?: { selection?: string; currentLine?: string; line?: number } };
+    | { type: 'assistant:query'; text: string; model?: string; context?: { selection?: string; currentLine?: string; line?: number } };

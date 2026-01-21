@@ -1,12 +1,31 @@
 import http from "node:http";
+import path from "node:path";
+import dotenv from "dotenv";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load env from root
+dotenv.config({ path: path.resolve(__dirname, "../../../.env.development") });
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+
 import { WebSocketServer, WebSocket } from "ws";
 import { TransportState, LinkToClientMessage, ClientToLinkMessage } from "@livevibe/protocol";
 
-import { MockLLMProvider } from "@livevibe/llm";
+import { MockLLMProvider, GeminiProvider } from "@livevibe/llm";
 
 const host = process.env.HOST ?? "127.0.0.1";
 const port = Number(process.env.PORT ?? 8787);
-const llmProvider = new MockLLMProvider();
+
+// Initialize Gemini
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  console.warn("GEMINI_API_KEY not found in environment, falling back to Mock LLM");
+}
+const llmProvider = apiKey
+  ? new GeminiProvider(apiKey, 'gemini-3-flash-preview')
+  : new MockLLMProvider();
 
 // --- Transport State ---
 let state: TransportState = {
@@ -125,26 +144,25 @@ function handleMessage(msg: ClientToLinkMessage) {
       console.log("[Transport] Tempo:", state.tempo);
       break;
     case "assistant:query":
-      console.log("[Assistant] Query:", msg.text);
-      llmProvider.chat([{ role: 'user', content: msg.text }], (delta: string) => {
-        // Send delta back to specific client? Or broadcast for now?
-        // Ideally we should have a session ID. For now, broadcast to all (simple MVP).
-        // Send delta
+      console.log("[Assistant] Query:", msg.text, "Context:", msg.context);
+
+      const messages = [{ role: 'user', content: msg.text } as const];
+
+      llmProvider.chat(messages, (delta: string) => {
         broadcast({ type: 'assistant:response', text: delta, done: false });
-      }).then(() => {
-        // Send completion with metadata
+      }, { ...msg.context, model: msg.model }).then((result) => { // Map msg.model to context
         broadcast({
           type: 'assistant:response',
           text: '',
           done: true,
           metadata: {
-            provider: 'Anthropic',
-            model: 'claude-3-5-sonnet-20240620',
-            usage: {
-              inputTokens: Math.floor(msg.text.length / 4), // rough estimate
-              outputTokens: 100, // mock
-              totalTokens: Math.floor(msg.text.length / 4) + 100,
-              costEstimate: 0.0012 // mock
+            provider: 'Google',
+            model: msg.model || 'gemini-3-flash-preview',
+            usage: result?.usage || {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              costEstimate: 0
             }
           }
         });

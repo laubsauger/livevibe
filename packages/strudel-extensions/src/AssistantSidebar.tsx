@@ -153,6 +153,41 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
         usage?: { inputTokens: number; outputTokens: number; totalTokens: number; costEstimate: number };
     }>({ provider: 'Anthropic', model: 'claude-3-5-sonnet' });
 
+    // --- Resizable Logic ---
+    const [width, setWidth] = useState(350);
+    const isResizingRef = useRef(false);
+
+    const startResizing = useCallback((mouseDownEvent: React.MouseEvent) => {
+        mouseDownEvent.preventDefault();
+        isResizingRef.current = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const startX = mouseDownEvent.clientX;
+        const startWidth = width;
+
+        const doDrag = (moveEvent: MouseEvent) => {
+            if (!isResizingRef.current) return;
+            // Calculate new width (dragging LEFT increases width)
+            // e.g. startX = 1000, currentX = 990 -> delta = 10 -> width increases by 10
+            const delta = startX - moveEvent.clientX;
+            const newWidth = Math.max(250, Math.min(800, startWidth + delta));
+            setWidth(newWidth);
+        };
+
+        const stopDrag = () => {
+            isResizingRef.current = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            window.removeEventListener('mousemove', doDrag);
+            window.removeEventListener('mouseup', stopDrag);
+        };
+
+        window.addEventListener('mousemove', doDrag);
+        window.addEventListener('mouseup', stopDrag);
+    }, [width]);
+    // -----------------------
+
     // Auto-scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -254,6 +289,8 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
     };
 
     const getContextLabel = (ctx: NonNullable<AssistantSidebarProps['activeContext']>) => {
+        if (!ctx.line) return '';
+
         if (ctx.selection) {
             const lineCount = (ctx.selection.match(/\n/g) || []).length + 1;
             if (lineCount > 1) {
@@ -275,7 +312,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                 top: '56px',
                 right: 0,
                 bottom: '48px', // Above transport bar
-                width: '350px',
+                width: `${width}px`,
                 backgroundColor: '#18181b', // zinc-900
                 borderLeft: '1px solid #27272a',
                 display: 'flex',
@@ -284,6 +321,21 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                 boxShadow: '-4px 0 10px rgba(0,0,0,0.3)'
             }}
         >
+            {/* Drag Handle */}
+            <div
+                onMouseDown={startResizing}
+                style={{
+                    position: 'absolute',
+                    left: '-4px', // Extend slightly outside
+                    top: 0,
+                    bottom: 0,
+                    width: '6px', // Hit area
+                    cursor: 'col-resize',
+                    zIndex: 100,
+                    backgroundColor: 'transparent',
+                }}
+            />
+
             {/* Header */}
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600, color: '#e4e4e7', fontSize: '14px' }}>Assistant</span>
@@ -381,14 +433,26 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                 <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
+                    alignItems: 'center',
                     fontSize: '10px',
                     color: '#52525b',
-                    padding: '0 2px'
+                    padding: '0 2px',
+                    gap: '8px',
+                    width: '100%',
+                    overflow: 'hidden'
                 }}>
-                    <span>{stats.provider} / {stats.model}</span>
+                    <span style={{
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        minWidth: 0,
+                        flex: 1
+                    }} title={`${stats.provider} / ${stats.model}`}>
+                        {stats.model?.replace(/-(\d{8})$/, '') /* Strip date suffix for display */}
+                    </span>
                     {stats.usage && (
-                        <span title={`In: ${stats.usage.inputTokens} | Out: ${stats.usage.outputTokens} | Total: ${stats.usage.totalTokens}`}>
-                            ${stats.usage.costEstimate.toFixed(4)} ({stats.usage.totalTokens} toks)
+                        <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }} title={`In: ${stats.usage.inputTokens} | Out: ${stats.usage.outputTokens} | Total: ${stats.usage.totalTokens}`}>
+                            ${stats.usage.costEstimate.toFixed(4)} ({stats.usage.totalTokens})
                         </span>
                     )}
                 </div>
