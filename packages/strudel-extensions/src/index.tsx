@@ -210,24 +210,45 @@ export function ExtensionPanel({ context }: { context: any }) {
     return undefined;
   };
 
-  const handleApplyCode = useCallback((code: string) => {
+  const handleApplyCode = useCallback((code: string, mode: 'insert' | 'replace' = 'replace') => {
     try {
       const view = getCodeMirrorView();
       if (view && view.dispatch) {
         const state = view.state;
         const selection = state.selection.main;
 
-        console.log('[Extension] Applying code to range:', {
-          from: selection.from,
-          to: selection.to,
-          docLength: state.doc.length
+        console.log('[Extension] Applying code:', {
+          mode,
+          selection: { from: selection.from, to: selection.to, empty: selection.empty }
         });
 
-        // Ensure we are dispatching to the connected view
-        view.dispatch({
-          changes: { from: selection.from, to: selection.to, insert: code },
-          selection: { anchor: selection.from + code.length } // Move cursor to end
-        });
+        if (mode === 'insert') {
+          // INSERT MODE: Always insert on new line below current line
+          const line = state.doc.lineAt(selection.from);
+          const insertPos = line.to;
+          const textToInsert = '\n' + code;
+
+          view.dispatch({
+            changes: { from: insertPos, insert: textToInsert },
+            selection: { anchor: insertPos + textToInsert.length }
+          });
+        } else {
+          // REPLACE MODE
+          if (selection.empty) {
+            // No selection -> Replace current line
+            const line = state.doc.lineAt(selection.from);
+            view.dispatch({
+              changes: { from: line.from, to: line.to, insert: code },
+              selection: { anchor: line.from + code.length }
+            });
+          } else {
+            // Selection exists -> Replace selection
+            view.dispatch({
+              changes: { from: selection.from, to: selection.to, insert: code },
+              selection: { anchor: selection.from + code.length }
+            });
+          }
+        }
 
         // Force focus back to editor
         view.focus();

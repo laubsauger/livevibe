@@ -30,7 +30,7 @@ interface AssistantSidebarProps {
     onClose: () => void;
     ws?: WebSocket | null;
     activeContext?: { selection?: string; currentLine?: string; line?: number };
-    onApplyCode?: (code: string) => void;
+    onApplyCode?: (code: string, mode?: 'insert' | 'replace') => void;
     onTogglePlay?: () => void;
     onJumpToLine?: (line: number) => void;
 }
@@ -42,7 +42,12 @@ interface Message {
 }
 
 // Memoized Message Bubble to prevent re-rendering of previous messages
-const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode }: { message: Message, appliedCodes: Set<string>, onApplyCode?: (code: string) => void }) => {
+const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode, hasSelection }: {
+    message: Message,
+    appliedCodes: Set<string>,
+    onApplyCode?: (code: string, mode?: 'insert' | 'replace') => void,
+    hasSelection?: boolean
+}) => {
     const components = React.useMemo(() => ({
         code({ node, inline, className, children, ...props }: any) {
             const match = /language-(\w+)/.exec(className || '')
@@ -57,6 +62,17 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode }: { mess
                 );
             }
 
+            const buttonStyle = {
+                fontSize: '10px',
+                padding: '2px 8px',
+                color: 'white',
+                border: 'none',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontWeight: 600,
+                transition: 'background-color 0.2s'
+            } as React.CSSProperties;
+
             return (
                 <div style={{ marginTop: '8px', marginBottom: '8px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #3f3f46' }}>
                     {/* Code Toolbar */}
@@ -70,22 +86,26 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode }: { mess
                     }}>
                         <span style={{ fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase' }}>{match[1]}</span>
                         {onApplyCode && (
-                            <button
-                                onClick={() => onApplyCode(codeString)}
-                                style={{
-                                    fontSize: '10px',
-                                    padding: '2px 8px',
-                                    backgroundColor: isApplied ? '#22c55e' : '#2563eb',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '3px',
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                    transition: 'background-color 0.2s'
-                                }}
-                            >
-                                {isApplied ? 'Applied ✓' : 'Apply'}
-                            </button>
+                            isApplied ? (
+                                <span style={{ ...buttonStyle, backgroundColor: '#22c55e', cursor: 'default' }}>Applied ✓</span>
+                            ) : (
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                    <button
+                                        onClick={() => onApplyCode(codeString, 'insert')}
+                                        title="Insert code on a new line below cursor"
+                                        style={{ ...buttonStyle, backgroundColor: '#2563eb' }}
+                                    >
+                                        + Add
+                                    </button>
+                                    <button
+                                        onClick={() => onApplyCode(codeString, 'replace')}
+                                        title="Replace current line or selection"
+                                        style={{ ...buttonStyle, backgroundColor: '#52525b' }}
+                                    >
+                                        ⟳ Replace
+                                    </button>
+                                </div>
+                            )
                         )}
                     </div>
                     <SyntaxHighlighter
@@ -244,6 +264,49 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
     }, [width, dockSide]);
     // -----------------------
 
+    // --- Content Push Logic ---
+    useEffect(() => {
+        // Find the main code container (div.grow inside the Repl layout)
+        // We look for a div with the 'grow' class which is standard in ReplEditor.jsx
+        const codeContainer = document.querySelector('.grow.flex.relative.overflow-hidden') as HTMLElement;
+
+        // Also grab root to cleanup any mess we made previously
+        const root = document.getElementById('root');
+        if (root) {
+            root.style.marginLeft = '';
+            root.style.marginRight = '';
+            root.style.width = '';
+        }
+
+        if (!codeContainer) return;
+
+        if (!open) {
+            codeContainer.style.marginLeft = '';
+            codeContainer.style.marginRight = '';
+            codeContainer.style.width = '';
+            return;
+        }
+
+        if (dockSide === 'left') {
+            codeContainer.style.marginLeft = `${width}px`;
+            codeContainer.style.marginRight = '';
+            // No need to set width, flex box handles it if we just add margin?
+            // Actually .grow fills space. If we add margin, it might overflow if we don't constrain?
+            // But flex item with margin should just shrink its content box.
+        } else {
+            codeContainer.style.marginLeft = '';
+            codeContainer.style.marginRight = `${width}px`;
+        }
+
+        return () => {
+            if (codeContainer) {
+                codeContainer.style.marginLeft = '';
+                codeContainer.style.marginRight = '';
+            }
+        };
+    }, [open, dockSide, width]);
+    // -----------------------
+
     // Auto-scroll to bottom
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -323,9 +386,9 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
         }
     };
 
-    const handleApply = useCallback((code: string) => {
+    const handleApply = useCallback((code: string, mode?: 'insert' | 'replace') => {
         if (onApplyCode) {
-            onApplyCode(code);
+            onApplyCode(code, mode);
             setAppliedCodes(prev => new Set(prev).add(code));
             setTimeout(() => {
                 setAppliedCodes(prev => {
@@ -339,13 +402,28 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
 
     // Key Pass-through
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
             handleSend();
             return;
         }
 
-        // Pass-through global shortcuts
+        // Pass Ctrl+Enter / Cmd+Enter to Strudel (evaluate code)
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            // Dispatch to the editor
+            const event = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                ctrlKey: e.ctrlKey,
+                metaKey: e.metaKey,
+                bubbles: true
+            });
+            document.querySelector('.cm-content')?.dispatchEvent(event);
+            return;
+        }
+
+        // Pass-through global shortcuts (Ctrl/Cmd+. for play/stop)
         if (e.key === '.' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             onTogglePlay?.();
@@ -444,6 +522,7 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                         message={m}
                         appliedCodes={appliedCodes}
                         onApplyCode={m.role === 'assistant' ? handleApply : undefined}
+                        hasSelection={!!activeContext?.selection}
                     />
                 ))}
                 {isTyping && <div style={{ fontSize: '12px', color: '#71717a', fontStyle: 'italic' }}>Typing...</div>}
