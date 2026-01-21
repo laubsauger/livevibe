@@ -10,8 +10,8 @@
     "start": "pnpm -C apps/web start",
     "lint": "pnpm -C apps/web lint",
     "test": "echo \"No tests yet\"",
-    "postinstall": "./scripts/setup-strudel.sh",
-    "setup": "./scripts/setup-strudel.sh",
+    "postinstall": "node scripts/setup-strudel.js",
+    "setup": "node scripts/setup-strudel.js",
     "patch:save": "cd vendor/strudel && git diff > ../../patches/strudel/integration.patch && echo '✅ Patch saved to patches/strudel/integration.patch'"
   },
   "devDependencies": {
