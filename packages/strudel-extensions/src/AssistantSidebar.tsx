@@ -584,51 +584,71 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                     <span>{showPatterns ? '▲' : '▼'}</span>
                 </button>
                 {showPatterns && (
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '8px' }} className="strudel-scrollbar">
-                        {savedPatterns.length === 0 ? (
-                            <div style={{ fontSize: '11px', color: '#71717a', textAlign: 'center', padding: '8px' }}>
-                                No saved patterns yet. Use ⭐ or Cmd+Shift+S to save.
-                            </div>
-                        ) : (
-                            savedPatterns.map(p => (
-                                <div key={p.id} style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    padding: '4px 8px',
-                                    borderRadius: '4px',
-                                    marginBottom: '4px',
-                                    backgroundColor: '#27272a',
-                                    fontSize: '11px'
-                                }}>
-                                    <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        <div style={{ fontWeight: 600, color: '#e4e4e7' }}>{p.name}</div>
-                                        <div style={{ fontSize: '9px', color: '#71717a' }}>{new Date(p.timestamp).toLocaleDateString()}</div>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '4px' }}>
-                                        <button
-                                            onClick={() => onApplyCode?.(p.content, 'replace')}
-                                            title="Apply pattern"
-                                            style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '3px', padding: '2px 6px', cursor: 'pointer', fontSize: '10px' }}
-                                        >
-                                            ▶
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (confirm(`Delete "${p.name}"?`)) {
-                                                    deletePattern(p.id);
-                                                    setSavedPatterns(getPatterns());
-                                                }
-                                            }}
-                                            title="Delete pattern"
-                                            style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '3px', padding: '2px 6px', cursor: 'pointer', fontSize: '10px' }}
-                                        >
-                                            🗑
-                                        </button>
-                                    </div>
+                    <div style={{ position: 'relative' }}>
+                        <div style={{ maxHeight: '200px', overflowY: 'auto', padding: '8px' }} className="strudel-scrollbar">
+                            {savedPatterns.length === 0 ? (
+                                <div style={{ fontSize: '11px', color: '#71717a', textAlign: 'center', padding: '8px' }}>
+                                    No saved patterns yet. Use ⭐ or Cmd+Shift+S to save.
                                 </div>
-                            ))
-                        )}
+                            ) : (
+                                savedPatterns.map((p, idx) => (
+                                    <div
+                                        key={p.id}
+                                        onClick={() => {
+                                            // Select this pattern
+                                            const pattern = savedPatterns.find(sp => sp.id === p.id);
+                                            if (pattern) {
+                                                // Show quick preview and actions
+                                                const action = confirm(`"${p.name}"\n\n${p.content.substring(0, 200)}${p.content.length > 200 ? '...' : ''}\n\nApply to editor?`);
+                                                if (action) {
+                                                    onApplyCode?.(p.content, 'replace');
+                                                }
+                                            }
+                                        }}
+                                        style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: '6px 10px',
+                                            borderRadius: '4px',
+                                            marginBottom: '4px',
+                                            backgroundColor: '#27272a',
+                                            fontSize: '11px',
+                                            cursor: 'pointer',
+                                            transition: 'background-color 0.15s'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3f3f46'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
+                                    >
+                                        <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            <div style={{ fontWeight: 600, color: '#e4e4e7' }}>{p.name}</div>
+                                            <div style={{ fontSize: '9px', color: '#71717a' }}>{new Date(p.timestamp).toLocaleDateString()}</div>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '4px' }} onClick={(e) => e.stopPropagation()}>
+                                            <button
+                                                onClick={() => onApplyCode?.(p.content, 'replace')}
+                                                title="Apply pattern"
+                                                style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', cursor: 'pointer', fontSize: '10px' }}
+                                            >
+                                                ▶
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    if (confirm(`Delete "${p.name}"?`)) {
+                                                        deletePattern(p.id);
+                                                        setSavedPatterns(getPatterns());
+                                                    }
+                                                }}
+                                                title="Delete pattern"
+                                                style={{ background: '#52525b', color: 'white', border: 'none', borderRadius: '3px', padding: '3px 8px', cursor: 'pointer', fontSize: '10px' }}
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
