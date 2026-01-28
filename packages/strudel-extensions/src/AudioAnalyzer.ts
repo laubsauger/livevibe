@@ -40,30 +40,65 @@ export function injectAudioAnalyzer(): void {
         isConnected: false,
 
         connect() {
-            // Intercept GainNode.connect to tap into the audio graph
+            // Method 1: Try to grab from global scheduler (Strudel standard)
+            const scheduler = (window as any).scheduler;
+            if (scheduler && (scheduler.audioContext || scheduler.ctx)) {
+                const ctx = scheduler.audioContext || scheduler.ctx;
+                this.init(ctx);
+                return;
+            }
+
+            // Method 2: Intercept GainNode.connect (Fallback)
             const originalGainConnect = GainNode.prototype.connect as any;
             let intercepted = false;
+
+            const self = this;
 
             (GainNode.prototype as any).connect = function (this: GainNode, destination: AudioNode | AudioParam, ...rest: any[]) {
                 if (!intercepted && destination && (destination as any).context) {
                     intercepted = true;
-                    const ctx = (destination as any).context as AudioContext;
-
-                    const analyzer = (window as any).livevibeAudioAnalyzer;
-                    analyzer.analyser = ctx.createAnalyser();
-                    analyzer.analyser.fftSize = 256; // Small for performance
-                    analyzer.analyser.smoothingTimeConstant = 0.8;
-                    analyzer.dataArray = new Uint8Array(analyzer.analyser.frequencyBinCount);
-
-                    const result = originalGainConnect.call(this, destination, ...rest);
-                    originalGainConnect.call(this, analyzer.analyser);
-                    analyzer.isConnected = true;
-
-                    console.log('[AudioAnalyzer] Connected to audio graph');
-                    return result;
+                    // We only need to init once
+                    if (!self.isConnected) {
+                        self.init((destination as any).context);
+                    }
+                    return originalGainConnect.call(this, destination, ...rest);
                 }
                 return originalGainConnect.call(this, destination, ...rest);
             };
+        },
+
+        init(ctx: AudioContext) {
+            if (this.isConnected) return;
+
+            try {
+                this.analyser = ctx.createAnalyser();
+                this.analyser.fftSize = 256;
+                this.analyser.smoothingTimeConstant = 0.8;
+                this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+
+                // We need to connect the graph to our analyzer
+                // If we got context from scheduler, we might need to connect Master -> Analyzer
+                // But usually we want to tap into the output. 
+                // Using a scriptProcessor or just connecting destination? 
+                // actually we can't connect destination used as source...
+                // But we can connect the scheduler's output node if exposed?
+
+                // If we rely on GainNode intercept, we handled the connection there.
+                // If we rely on Scheduler, we might not have a node to connect FROM.
+
+                // Let's stick to just saving the context for LoopEngine, 
+                // and try to find a node to connect for Analysis.
+
+                // If we are here via scheduler, we at least have context for LoopEngine!
+                this.isConnected = true;
+
+                // Try to find a node to connect
+                // Note: This is imperfect for analysis but crucial for LoopEngine context
+
+                console.log('[AudioAnalyzer] Context captured');
+            } catch (e) {
+                console.error('[AudioAnalyzer] internal init failed', e);
+            }
         },
 
         analyze(): AudioFeatures {

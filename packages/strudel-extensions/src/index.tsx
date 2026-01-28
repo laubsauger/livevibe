@@ -4,6 +4,7 @@ import { AssistantSidebar } from './AssistantSidebar';
 import { injectAudioAnalyzer, getAudioAnalysis } from './AudioAnalyzer';
 import { validatePattern, formatValidationResult } from './PatternValidator';
 import { savePattern } from './PatternStore';
+import { encodeStrudel } from './url';
 
 export function initExtensions(context: any) {
   console.log('[LiveVibe] Extensions loaded');
@@ -53,7 +54,7 @@ export function ExtensionPanel({ context }: { context: any }) {
       debounceTimeout = setTimeout(() => {
         const ctx = getEditorContext();
         if (ctx) setActiveContext(ctx);
-      }, 100); // 100ms debounce
+      }, 500); // 500ms debounce
     };
 
     // Poll for editor existence, then attach listeners
@@ -125,6 +126,64 @@ export function ExtensionPanel({ context }: { context: any }) {
   }, []);
 
 
+  // Transport Sync Logic
+  useEffect(() => {
+    let animationFrameId: number;
+    let lastStateHash = '';
+
+    const syncTransport = () => {
+      const scheduler = (window as any).scheduler;
+      const refView = getCodeMirrorView();
+
+      if (scheduler && wsRef.current?.readyState === WebSocket.OPEN) {
+        // Strudel uses 'cyclist' internally.
+        // scheduler.started -> boolean
+        // scheduler.now() -> current cycle (float)
+        // scheduler.cps -> cycles per second
+        // scheduler.getTime() -> current audio time
+
+        const playing = scheduler.started;
+        // scheduler.now might be a getter or a function depending on version
+        const nowVal = typeof scheduler.now === 'function' ? scheduler.now() : scheduler.now;
+        const step = Math.floor(nowVal || 0); // Convert cycle to step (integer)
+        const time = (typeof scheduler.getTime === 'function' ? scheduler.getTime() : 0) || 0;
+        const tempo = (scheduler.cps || 0.5) * 60 * 4; // Cycles/sec to BPM (assuming 4 beats/cycle)
+
+        // Create a hash to prevent spamming generic updates if nothing changed
+        // But for time/step, we want high refresh rate if playing
+        const currentStateHash = `${playing}-${step}-${Math.round(time * 10)}-${tempo}`;
+
+        if (playing || currentStateHash !== lastStateHash) {
+          const payload: TransportState = {
+            playing,
+            step,
+            tempo,
+            time
+          };
+
+          // Update local state for UI
+          setTransport(payload);
+
+          // Broadcast to Companion
+          sendMessage({ type: 'transport:state', payload });
+          lastStateHash = currentStateHash;
+        }
+      } else if (refView && refView.state && !scheduler) {
+        // Fallback if scheduler isn't globally available but we have the editor
+        // (Though standard Strudel exposes window.scheduler)
+      }
+
+      animationFrameId = requestAnimationFrame(syncTransport);
+    };
+
+    // Start polling
+    animationFrameId = requestAnimationFrame(syncTransport);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [context, status]); // Re-run if context or connection status changes
+
   useEffect(() => {
     connect();
     return () => {
@@ -151,16 +210,37 @@ export function ExtensionPanel({ context }: { context: any }) {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as LinkToClientMessage;
-        if (msg.type === 'transport:state') {
-          setTransport(msg.payload);
+
+        // Handle incoming Transport Control from Companion
+        if (msg.type === 'transport:play') {
+          const scheduler = (window as any).scheduler;
+          if (scheduler && !scheduler.started) {
+            // Favor context toggle if available to update UI
+            if (context?.handleTogglePlay) context.handleTogglePlay();
+            else scheduler.start();
+          }
+        } else if (msg.type === 'transport:stop') {
+          const scheduler = (window as any).scheduler;
+          if (scheduler && scheduler.started) {
+            if (context?.handleTogglePlay) context.handleTogglePlay();
+            else scheduler.stop();
+          }
+        } else if (msg.type === 'transport:tempo') {
+          const scheduler = (window as any).scheduler;
+          if (scheduler?.setCps) {
+            // transport:tempo payload is BPM
+            // Strudel CPS = BPM / 60 / 4 (usually)
+            scheduler.setCps(msg.payload / 240);
+          }
         }
+
       } catch (err) {
         console.error('Failed to parse message', err);
       }
     };
   }
 
-  function sendMessage(msg: ClientToLinkMessage) {
+  function sendMessage(msg: ClientToLinkMessage | LinkToClientMessage) {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
     }
@@ -170,11 +250,15 @@ export function ExtensionPanel({ context }: { context: any }) {
     // Sync with Strudel
     const scheduler = (window as any).scheduler;
 
+    if (context?.handleTogglePlay) {
+      context.handleTogglePlay();
+      return;
+    }
+
+    // Fallback direct control
     if (transport.playing) {
-      sendMessage({ type: 'transport:stop' });
       if (scheduler?.pause) scheduler.pause();
     } else {
-      sendMessage({ type: 'transport:play' });
       if (scheduler?.start) scheduler.start();
     }
   }
@@ -182,10 +266,9 @@ export function ExtensionPanel({ context }: { context: any }) {
   function handleTempoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const newTempo = parseFloat(e.target.value);
     setTransport(prev => ({ ...prev, tempo: newTempo }));
-    sendMessage({ type: 'transport:tempo', payload: newTempo });
 
     const scheduler = (window as any).scheduler;
-    if (scheduler?.setCps) scheduler.setCps(newTempo / 60 / 4); // Strudel uses CPS (Cycles per second), usually scaled
+    if (scheduler?.setCps) scheduler.setCps(newTempo / 60 / 4);
   }
 
   const getStatusColor = () => {
@@ -423,6 +506,33 @@ export function ExtensionPanel({ context }: { context: any }) {
         >
           <span style={{ fontSize: '16px' }}>💬</span>
           <span>Assistant</span>
+        </button>
+
+        <div style={{ width: '1px', height: '24px', backgroundColor: '#27272a', margin: '0 8px' }} />
+
+        {/* Share Button */}
+        <button
+          onClick={() => {
+            const view = getCodeMirrorView();
+            if (view && view.state) {
+              const code = view.state.doc.toString();
+              const url = encodeStrudel(code);
+              navigator.clipboard.writeText(url).then(() => {
+                const toast = document.createElement('div');
+                toast.textContent = `📋 Link copied to clipboard!`;
+                toast.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;padding:8px 16px;border-radius:4px;z-index:9999;font-size:12px;font-family:monospace;';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 2000);
+              });
+            } else {
+              alert('Could not access editor content');
+            }
+          }}
+          style={buttonStyle}
+          className="hover:bg-white/10"
+        >
+          <span style={{ fontSize: '16px' }}>🔗</span>
+          <span>Share</span>
         </button>
 
         <div style={{ width: '1px', height: '24px', backgroundColor: '#27272a', margin: '0 8px' }} />

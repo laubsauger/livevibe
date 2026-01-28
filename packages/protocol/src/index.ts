@@ -22,7 +22,10 @@ export type LinkToClientMessage =
                 costEstimate: number;
             }
         }
-    };
+    }
+    | { type: 'transport:play' }
+    | { type: 'transport:stop' }
+    | { type: 'transport:tempo'; payload: number };
 
 export type ClientToLinkMessage =
     | { type: 'transport:play' }

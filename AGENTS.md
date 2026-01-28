@@ -1,16 +1,22 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository currently contains a single documentation artifact. Core product and architecture guidance live in `docs/baseline.md`. There is no application code or monorepo layout checked in yet; use the baseline as the source of truth for planned packages (e.g., `/apps/web`, `/packages/engine`) until implementation begins.
+This repo is now a pnpm monorepo. Core product and architecture guidance live in `docs/baseline.md`. Current layout:
+- `apps/web` — Next.js App Router UI with Tailwind + shadcn-style components.
+- `apps/companion` — Node companion runtime (HTTP + WebSocket stubs, `/health` and `/player`).
+- `packages/engine` — Engine package stub.
+- `packages/schemas` — Schemas package stub.
+- `docs/` — Roadmap and baseline docs.
 
 ## Build, Test, and Development Commands
-No build, test, or dev scripts are defined in this repo at present. When bootstrapping the project, document commands in this section (e.g., `pnpm dev`, `pnpm test`, `pnpm lint`) and keep them consistent with the baseline’s monorepo plan.
+- `pnpm dev` — Run companion + web together.
+- `pnpm dev:web` — Run the Next.js app only.
+- `pnpm dev:companion` — Run the companion only.
+- `pnpm build` / `pnpm start` — Build and start the web app.
+- `pnpm lint` — Next.js lint.
 
 ## Coding Style & Naming Conventions
-No style guide or tooling is configured yet. If you add tooling, prefer:
-- TypeScript-first formatting with a standard formatter (e.g., Prettier) and a strict linter.
-- Consistent naming for packages and modules (e.g., `packages/engine`, `packages/schemas`).
-- Clear file naming for domain concepts (e.g., `scheduler.ts`, `runtimeAdapter.ts`).
+TypeScript is the default across the monorepo. UI styling uses Tailwind CSS with dark-first tokens in `apps/web/app/globals.css` and config in `apps/web/tailwind.config.ts`. shadcn-style components live under `apps/web/components/ui`, with utilities in `apps/web/lib/utils.ts`. Keep file naming aligned to domain concepts (e.g., `scheduler.ts`, `runtimeAdapter.ts`).
 
 ## Testing Guidelines
 No tests are present yet. When adding tests, document:

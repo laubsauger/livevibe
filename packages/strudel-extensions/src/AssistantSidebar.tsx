@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { savePattern, getPatterns, deletePattern, SavedPattern } from './PatternStore';
+import { LoopStation } from './LoopStation';
 
 const scrollbarStyles = `
   .strudel-scrollbar::-webkit-scrollbar {
@@ -220,6 +221,31 @@ const MessageBubble = React.memo(({ message, appliedCodes, onApplyCode, hasSelec
                     {message.content}
                 </ReactMarkdown>
             )}
+        </div>
+    );
+});
+
+// Memoized Context Preview to prevent re-rendering when other props change
+const ContextPreview = React.memo(({ context }: { context: NonNullable<AssistantSidebarProps['activeContext']> }) => {
+    return (
+        <div className="strudel-scrollbar" style={{
+            maxHeight: '100px',
+            overflowY: 'auto',
+            borderRadius: '4px',
+            border: '1px solid #3f3f46',
+            backgroundColor: '#1e1e1e' // Force dark bg
+        }}>
+            <SyntaxHighlighter
+                style={oneDark}
+                language="javascript"
+                PreTag="div"
+                className="strudel-scrollbar"
+                customStyle={{ margin: 0, padding: '8px', fontSize: '10px' }}
+                showLineNumbers={true}
+                startingLineNumber={context.line}
+            >
+                {context.selection || context.currentLine || ' '}
+            </SyntaxHighlighter>
         </div>
     );
 });
@@ -653,6 +679,11 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                 )}
             </div>
 
+            {/* Loop Station */}
+            <LoopStation />
+
+            {/* Messages */}
+
             {/* Messages */}
             <div className="strudel-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {/* Show collapsed indicator for older messages */}
@@ -705,31 +736,38 @@ export const AssistantSidebar: React.FC<AssistantSidebarProps> = ({ open, onClos
                             alignItems: 'center'
                         }}>
                             <span style={{ fontWeight: 600, color: '#d4d4d8' }}>Context</span>
-                            <span>{getContextLabel(activeContext)}</span>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <span>{getContextLabel(activeContext)}</span>
+                                <button
+                                    onClick={() => {
+                                        const code = activeContext.selection || activeContext.currentLine;
+                                        if (!code) return;
+                                        const name = prompt('Save this context as pattern:', `Context ${Date.now().toString(36)}`);
+                                        if (name) {
+                                            savePattern(name, code);
+                                            // Refresh tokens if needed
+                                            if (showPatterns) setSavedPatterns(getPatterns());
+                                            alert(`Saved "${name}" to library!`);
+                                        }
+                                    }}
+                                    title="Save context to library"
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '12px',
+                                        padding: '0 4px'
+                                    }}
+                                >
+                                    ⭐
+                                </button>
+                            </div>
                         </div>
                     )}
 
                     {/* LIVE PREVIEW OF CONTEXT */}
                     {activeContext && (
-                        <div className="strudel-scrollbar" style={{
-                            maxHeight: '100px',
-                            overflowY: 'auto',
-                            borderRadius: '4px',
-                            border: '1px solid #3f3f46',
-                            backgroundColor: '#1e1e1e' // Force dark bg
-                        }}>
-                            <SyntaxHighlighter
-                                style={oneDark}
-                                language="javascript"
-                                PreTag="div"
-                                className="strudel-scrollbar"
-                                customStyle={{ margin: 0, padding: '8px', fontSize: '10px' }}
-                                showLineNumbers={true}
-                                startingLineNumber={activeContext.line}
-                            >
-                                {activeContext.selection || activeContext.currentLine || ' '}
-                            </SyntaxHighlighter>
-                        </div>
+                        <ContextPreview context={activeContext} />
                     )}
                 </div>
 
